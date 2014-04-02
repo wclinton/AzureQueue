@@ -81,6 +81,7 @@
     <Compile Include="AzureAccount.cs" />
     <Compile Include="BlobContentReader.cs" />
     <Compile Include="BlobContentWriter.cs" />
+    <Compile Include="BlobsContextReader.cs" />
     <Compile Include="HandlerCallback.cs" />
     <Compile Include="InvoiceUtil.cs" />
     <Compile Include="IResponseHandler.cs" />

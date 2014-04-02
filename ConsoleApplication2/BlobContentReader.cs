@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,17 +18,45 @@ namespace ConsoleApplication2
     /// pattern, allowing the frame reading to be threaded.
     /// </summary>
     /// <typeparam name="T">The type of entities that will be returned in the GetNext method.</typeparam>
-    public sealed class BlobContentReader<T> : IDisposable, IEnumerable<IList<T>>
+    public sealed class BlobContentReader<T> : IDisposable, IEnumerable<T>
     {
         #region Private members
 
-        private Task _producerTask;
-        private BlockingCollection<byte[]> _frameQueue;
-        private CancellationTokenSource _cancel;
-        private ManualResetEvent _headerReady;
-        private volatile int _frameCount;
-        private volatile bool _cancelled;
-        private bool _disposed;
+        private Task producerTask;
+        private BlockingCollection<byte[]> frameQueue;
+   //     private CancellationTokenSource cancel;
+        private ManualResetEvent headerReady;
+        private volatile int frameCount;
+        private volatile bool cancelled;
+        private bool disposed;
+
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="blobReference">The blob reference that content will be obtained from</param>
+        /// <param name="boundedCapacity">The bounded size of the collection. This is used to throttle the producer.</param>
+        public BlobContentReader(ICloudBlob blobReference, int boundedCapacity = 128)
+            : this(blobReference.OpenRead(), boundedCapacity)
+        {
+            if (blobReference == null) throw new ArgumentNullException("blobReference");         
+        }
+
+
+        public BlobContentReader(Stream stream, int boundedCapacity = 128)
+        {
+
+            frameQueue = new BlockingCollection<byte[]>(boundedCapacity);
+            headerReady = new ManualResetEvent(false);
+         //   cancel = new CancellationTokenSource();
+
+            
+
+            producerTask = new Task(() => Producer(stream));
+            producerTask.RunSynchronously();
+        }
+
+
 
         #endregion
 
@@ -39,45 +68,45 @@ namespace ConsoleApplication2
         /// <param name="disposing">True if managed resources should be cleaned up.</param>
         private void Dispose(bool disposing)
         {
-            if (!disposing || _disposed) return;
+            if (!disposing || disposed) return;
 
             try
             {
-                if ((_cancel != null) && (_producerTask != null))
+               if /* ((cancel != null) &&*/ (producerTask != null)
                 {
-                    _cancel.Cancel();
+                    //cancel.Cancel();
 
                     try
                     {
-                        _producerTask.Wait();
+                        producerTask.Wait();
                     }
                     catch (Exception)
                     {
-                        _cancelled = true;
+                        cancelled = true;
                     }
 
-                    _producerTask.Dispose();
-                    _producerTask = null;
-
-                    _cancel.Dispose();
-                    _cancel = null;
+                    producerTask.Dispose();
+                    producerTask = null;
+//
+//                    cancel.Dispose();
+//                    cancel = null;
                 }
 
-                if (_headerReady != null)
+                if (headerReady != null)
                 {
-                    _headerReady.Dispose();
-                    _headerReady = null;
+                    headerReady.Dispose();
+                    headerReady = null;
                 }
 
-                if (_frameQueue != null)
+                if (frameQueue != null)
                 {
-                    _frameQueue.Dispose();
-                    _frameQueue = null;
+                    frameQueue.Dispose();
+                    frameQueue = null;
                 }
             }
             finally
             {
-                _disposed = true;
+                disposed = true;
             }
         }
 
@@ -93,16 +122,16 @@ namespace ConsoleApplication2
             {
                 try
                 {
-                    var header = new byte[sizeof (int)*2];
-                    var frameSize = new byte[sizeof (int)];
+                    var header = new byte[sizeof(int) * 2];
+                    var frameSize = new byte[sizeof(int)];
 
                     ReadStream(stream, header, 0, header.Length);
 
-                    _frameCount = BitConverter.ToInt32(header, 0);
+                    frameCount = BitConverter.ToInt32(header, 0);
 
-                    _headerReady.Set();
+                    headerReady.Set();
 
-                    for (var i = 0; i < _frameCount; i++)
+                    for (var i = 0; i < frameCount; i++)
                     {
                         ReadStream(stream, frameSize, 0, frameSize.Length);
 
@@ -110,18 +139,18 @@ namespace ConsoleApplication2
                         var frame = new byte[size];
 
                         ReadStream(stream, frame, 0, size);
-                       
-                        if (!_frameQueue.TryAdd(frame, Timeout.Infinite, _cancel.Token)) break;
+
+                        if (!frameQueue.TryAdd(frame, Timeout.Infinite)) break;
                     }
                 }
                 catch (OperationCanceledException)
                 {
-                    _cancelled = true;
+                    cancelled = true;
                 }
                 finally
                 {
-                    _frameQueue.CompleteAdding();
-                    _headerReady.Set();
+                    frameQueue.CompleteAdding();
+                    headerReady.Set();
                 }
             }
         }
@@ -139,7 +168,7 @@ namespace ConsoleApplication2
             if (buffer == null) throw new ArgumentNullException("buffer");
             if (offset < 0) throw new ArgumentOutOfRangeException("offset");
             if (size < 0) throw new ArgumentOutOfRangeException("size");
-            if (_cancel.IsCancellationRequested) throw new OperationCanceledException();
+      //      if (cancel.IsCancellationRequested) throw new OperationCanceledException();
 
             var read = stream.Read(buffer, offset, size);
 
@@ -153,21 +182,7 @@ namespace ConsoleApplication2
 
         #region Constructor and destructor
 
-        /// <summary>
-        /// Constructor
-        /// </summary>
-        /// <param name="blobReference">The blob reference that content will be obtained from</param>
-        /// <param name="boundedCapacity">The bounded size of the collection. This is used to throttle the producer.</param>
-        public BlobContentReader(ICloudBlob blobReference, int boundedCapacity = 128)
-        {
-            if (blobReference == null) throw new ArgumentNullException("blobReference");
 
-            _frameQueue = new BlockingCollection<byte[]>(boundedCapacity);
-            _headerReady = new ManualResetEvent(false);
-            _cancel = new CancellationTokenSource();
-
-            _producerTask = blobReference.OpenReadAsync(_cancel.Token).ContinueWith(t => Producer(t.Result));
-        }
 
         /// <summary>
         /// Destructor.
@@ -203,9 +218,21 @@ namespace ConsoleApplication2
         /// Returns generic based enumerator.
         /// </summary>
         /// <returns> Returns generic based enumerator.</returns>
-        public IEnumerator<IList<T>> GetEnumerator()
+        public IEnumerator<T> GetEnumerator()
         {
-            return _frameQueue.GetConsumingEnumerable(_cancel.Token).Select(frame => (IList<T>)JsonConvert.DeserializeObject(Encoding.ASCII.GetString(Zip.Decompress(frame)), typeof (IList<T>))).GetEnumerator();
+            var list = frameQueue.GetConsumingEnumerable().Select(frame => (IList<T>)
+                JsonConvert.DeserializeObject(Encoding.ASCII.GetString(Zip.Decompress(frame)), typeof(IList<T>)));
+
+
+            IList<T> outList = new List<T>();
+            foreach (IEnumerable<T> item in list)
+            {
+                foreach (var i in item)
+                {
+                    outList.Add(i);    
+                }                
+            }
+            return outList.GetEnumerator();
         }
 
         #endregion
@@ -219,7 +246,7 @@ namespace ConsoleApplication2
         {
             get
             {
-                return (_headerReady.WaitOne() ? _frameCount : 0);
+                return (headerReady.WaitOne() ? frameCount : 0);
             }
         }
 
@@ -230,7 +257,7 @@ namespace ConsoleApplication2
         {
             get
             {
-                return (_frameQueue.IsAddingCompleted && (_frameQueue.Count == 0));
+                return (frameQueue.IsAddingCompleted && (frameQueue.Count == 0));
             }
         }
 
@@ -241,7 +268,7 @@ namespace ConsoleApplication2
         {
             get
             {
-                return _cancelled;
+                return cancelled;
             }
         }
 

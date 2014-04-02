@@ -52,16 +52,16 @@ namespace ConsoleApplication2
                 using (var reader = new BlobContentReader<Invoice>(blob))
                 {
                     // ReSharper disable once UnusedVariable
-                    foreach (var list in reader)
+                    foreach (var invoice in reader)
                     {
-                        foreach (var invoice in list)
-                        {
+//                        foreach (var invoice in list)
+//                        {
                             //Console.Write(invoice.Dump();
 
-                           // Console.WriteLine(invoice.InvoiceNumber);
+                            Console.WriteLine(invoice.InvoiceNumber);
 
                            
-                        }
+                   //     }
                         Console.Write(".");
 
                     }
