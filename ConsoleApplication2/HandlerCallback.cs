@@ -11,7 +11,7 @@ namespace ConsoleApplication2
 
         public HandlerCallback()
         {
-            _writer = new BlobContentWriter("invoices.json", /*32 */ 1024 * 1000);
+            _writer = new BlobContentWriter("invoices.json", 128); ///*32 */ 1024 * 1000);
         }
 
         public void HandleResponse(Guid requestId, string payload, bool completed)

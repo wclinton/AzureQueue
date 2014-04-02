@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Nephos.Model;
@@ -25,21 +27,21 @@ namespace ConsoleApplication2
 
             long st = Environment.TickCount;
 
-            ICloudBlob blob=null;
+            ICloudBlob blob = null;
 
             Console.WriteLine("Starting streaming download...");
+
+            var blobList = new List<ICloudBlob>();
 
             while (!done)
             {
 
-                var blobName = Directory.GetCurrentDirectory() +"\\invoices.json." + i.ToString("D3");
-
-              
-
+                var blobName = Directory.GetCurrentDirectory() + "\\invoices.json." + i.ToString("D3");
 
                 try
                 {
                     blob = container.GetBlobReferenceFromServer(blobName);
+                    blobList.Add(blob);
                 }
 
                 catch
@@ -47,28 +49,23 @@ namespace ConsoleApplication2
                     done = true;
                     continue;
                 }
-
-                         
-                using (var reader = new BlobContentReader<Invoice>(blob))
-                {
-                    // ReSharper disable once UnusedVariable
-                    foreach (var invoice in reader)
-                    {
-//                        foreach (var invoice in list)
-//                        {
-                            //Console.Write(invoice.Dump();
-
-                            Console.WriteLine(invoice.InvoiceNumber);
-
-                           
-                   //     }
-                        Console.Write(".");
-
-                    }
-                  
-                }
                 i++;
             }
+
+            using (var reader = new BlobsContextReader<Invoice>(blobList))
+            {
+
+                foreach (var invoice in reader)
+                {
+
+                    //Console.Write(invoice.Dump());
+
+                    Console.WriteLine("invoice: "+invoice.InvoiceNumber+ " Date:"+invoice.InvoiceDate);
+
+
+                }
+                Console.Write(".");
+            }        
 
             Console.WriteLine();
             long et = Environment.TickCount - st;
@@ -113,7 +110,7 @@ namespace ConsoleApplication2
 
             var container = client.GetContainerReference(AzureAccount.Container);
 
-            //   container.CreateIfNotExists();
+            container.CreateIfNotExists();
 
             // Set permissions on the container.
             var containerPermissions = new BlobContainerPermissions();
@@ -126,7 +123,13 @@ namespace ConsoleApplication2
             container.SetPermissions(containerPermissions);
 
 
-
+           
+            //Delete all existing blobs in the container.
+            foreach (var blob in container.ListBlobs())
+            {
+                var cloudBlob = container.GetBlockBlobReference(blob.Uri.ToString());
+                cloudBlob.DeleteIfExists();
+            }
 
 
 
