@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
+using BlobHandler;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Nephos.Model;
@@ -14,43 +14,48 @@ namespace ConsoleApplication2
     /// </summary>
     static class Program
     {
-
-
         static void DownloadStream()
         {
             var client = GetBlobClient();
 
             var container = client.GetContainerReference(AzureAccount.Container);
-
-            bool done = false;
-            int i = 0;
-
+      
             long st = Environment.TickCount;
 
-            ICloudBlob blob = null;
+          
 
             Console.WriteLine("Starting streaming download...");
 
+
+              
+
             var blobList = new List<ICloudBlob>();
 
-            while (!done)
+
+            foreach (var blob in container.ListBlobs())
             {
-
-                var blobName = Directory.GetCurrentDirectory() + "\\invoices.json." + i.ToString("D3");
-
-                try
-                {
-                    blob = container.GetBlobReferenceFromServer(blobName);
-                    blobList.Add(blob);
-                }
-
-                catch
-                {
-                    done = true;
-                    continue;
-                }
-                i++;
+                var cloudBlob = container.GetBlockBlobReference(blob.Uri.ToString());
+                blobList.Add(cloudBlob);
             }
+
+//            while (!done)
+//            {
+//
+//                var blobName = Directory.GetCurrentDirectory() + "\\invoices.json." + i.ToString("D3");
+//
+//                try
+//                {
+//                    blob = container.GetBlobReferenceFromServer(blobName);
+//                    blobList.Add(blob);
+//                }
+//
+//                catch
+//                {
+//                    done = true;
+//                    continue;
+//                }
+//                i++;
+//            }
 
             using (var reader = new BlobsContextReader<Invoice>(blobList))
             {
@@ -155,13 +160,13 @@ namespace ConsoleApplication2
                         where f.Contains("invoices.json.")
                         select f;
 
-
+            var i = 0;
             foreach (var path in files)
             {
                 using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read))
                 {
-                    var blob = container.GetBlockBlobReference(path);
-
+                    var blob = container.GetBlockBlobReference("blob"+ i.ToString(("D3")));
+                    i++;
                     try
                     {
                         blob.Delete();

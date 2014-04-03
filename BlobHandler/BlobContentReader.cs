@@ -3,18 +3,17 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Newtonsoft.Json;
 
-namespace ConsoleApplication2
+namespace BlobHandler
 {
     /// <summary>
     /// Class for handling reading compressed frames of JSON content from a blob stream. Based on producer and consumer
-    /// pattern, allowing the frame reading to be threaded.
+    /// pattern, allowing the bytes reading to be threaded.
     /// </summary>
     /// <typeparam name="T">The type of entities that will be returned in the GetNext method.</typeparam>
     public sealed class BlobContentReader<T> : IDisposable, IEnumerable<T>
@@ -22,12 +21,13 @@ namespace ConsoleApplication2
         #region Private members
 
         private Task producerTask;
-        private BlockingCollection<byte[]> frameQueue;
-   //     private CancellationTokenSource cancel;
+        private BlockingCollection<T> entryQueue;
+        //     private CancellationTokenSource cancel;
         private ManualResetEvent headerReady;
         private volatile int frameCount;
         private volatile bool cancelled;
         private bool disposed;
+        private readonly bool useCompression;
 
 
         /// <summary>
@@ -35,24 +35,28 @@ namespace ConsoleApplication2
         /// </summary>
         /// <param name="blobReference">The blob reference that content will be obtained from</param>
         /// <param name="boundedCapacity">The bounded size of the collection. This is used to throttle the producer.</param>
-        public BlobContentReader(ICloudBlob blobReference, int boundedCapacity = 128)
-            : this(blobReference.OpenRead(), boundedCapacity)
+        /// <param name="useCompression"></param>
+        public BlobContentReader(ICloudBlob blobReference, int boundedCapacity = 128, bool useCompression = false)
+            : this(blobReference.OpenRead(), boundedCapacity, useCompression)
         {
-            if (blobReference == null) throw new ArgumentNullException("blobReference");         
+            if (blobReference == null) throw new ArgumentNullException("blobReference");
         }
 
 
-        public BlobContentReader(Stream stream, int boundedCapacity = 128)
+        public BlobContentReader(Stream stream, int boundedCapacity = 128, bool useCompression = true)
         {
 
-            frameQueue = new BlockingCollection<byte[]>(boundedCapacity);
-            headerReady = new ManualResetEvent(false);
-         //   cancel = new CancellationTokenSource();
 
-            
+            entryQueue = new BlockingCollection<T>(boundedCapacity);
+            headerReady = new ManualResetEvent(false);
+            //   cancel = new CancellationTokenSource();
+
+
 
             producerTask = new Task(() => Producer(stream));
-            producerTask.RunSynchronously();
+          
+            this.useCompression = useCompression;
+            producerTask.Start();
         }
 
 
@@ -71,7 +75,7 @@ namespace ConsoleApplication2
 
             try
             {
-               if /* ((cancel != null) &&*/ (producerTask != null)
+                if /* ((cancel != null) &&*/ (producerTask != null)
                 {
                     //cancel.Cancel();
 
@@ -86,9 +90,9 @@ namespace ConsoleApplication2
 
                     producerTask.Dispose();
                     producerTask = null;
-//
-//                    cancel.Dispose();
-//                    cancel = null;
+                    //
+                    //                    cancel.Dispose();
+                    //                    cancel = null;
                 }
 
                 if (headerReady != null)
@@ -97,10 +101,10 @@ namespace ConsoleApplication2
                     headerReady = null;
                 }
 
-                if (frameQueue != null)
+                if (entryQueue != null)
                 {
-                    frameQueue.Dispose();
-                    frameQueue = null;
+                    entryQueue.Dispose();
+                    entryQueue = null;
                 }
             }
             finally
@@ -110,7 +114,7 @@ namespace ConsoleApplication2
         }
 
         /// <summary>
-        /// Threaded frame producer that handles all blob stream interaction.
+        /// Threaded bytes producer that handles all blob stream interaction.
         /// </summary>
         /// <param name="stream">The stream returned as a result of the async open.</param>
         private void Producer(Stream stream)
@@ -139,8 +143,20 @@ namespace ConsoleApplication2
 
                         ReadStream(stream, frame, 0, size);
 
-                        if (!frameQueue.TryAdd(frame, Timeout.Infinite)) break;
+                        Console.WriteLine("Reading bytes...");
+
+                       // var list = (IList<T>)JsonConvert.DeserializeObject(Encoding.ASCII.GetString(Zip.Decompress(bytes)), typeof(IList<T>));
+
+                        var list = (IList<T>)JsonConvert.DeserializeObject(Decode(frame), typeof(IList<T>));
+
+                        foreach (var item in list)
+                        {
+                            Console.WriteLine("Adding Item"+ item.ToString());
+                            if (!entryQueue.TryAdd(item, Timeout.Infinite)) break;
+                        }
+
                     }
+                    Console.WriteLine("Rompleted reading all frames. --------------------");
                 }
                 catch (OperationCanceledException)
                 {
@@ -148,8 +164,9 @@ namespace ConsoleApplication2
                 }
                 finally
                 {
-                    frameQueue.CompleteAdding();
+                    entryQueue.CompleteAdding();
                     headerReady.Set();
+
                 }
             }
         }
@@ -167,7 +184,7 @@ namespace ConsoleApplication2
             if (buffer == null) throw new ArgumentNullException("buffer");
             if (offset < 0) throw new ArgumentOutOfRangeException("offset");
             if (size < 0) throw new ArgumentOutOfRangeException("size");
-      //      if (cancel.IsCancellationRequested) throw new OperationCanceledException();
+            //      if (cancel.IsCancellationRequested) throw new OperationCanceledException();
 
             var read = stream.Read(buffer, offset, size);
 
@@ -176,6 +193,19 @@ namespace ConsoleApplication2
                 read += stream.Read(buffer, offset + read, size - read);
             }
         }
+
+//        private byte[] ObjectToByteArray(Object obj)
+//        {
+//            if (obj == null)
+//                return null;
+//            var bf = new BinaryFormatter();
+//            using (var ms = new MemoryStream())
+//            {
+//                bf.Serialize(ms, obj);
+//                return ms.ToArray();
+//            }
+//        }
+
 
         #endregion
 
@@ -219,20 +249,20 @@ namespace ConsoleApplication2
         /// <returns> Returns generic based enumerator.</returns>
         public IEnumerator<T> GetEnumerator()
         {
-            var list = frameQueue.GetConsumingEnumerable().Select(frame => (IList<T>)
-                JsonConvert.DeserializeObject(Encoding.ASCII.GetString(Zip.Decompress(frame)), typeof(IList<T>)));
+            //return entryQueue.GetConsumingEnumerable().Select(bytes => (IList<T>)JsonConvert.DeserializeObject(Decode(bytes), typeof(IList<T>))).GetEnumerator();
 
-
-            IList<T> outList = new List<T>();
-            foreach (IEnumerable<T> item in list)
-            {
-                foreach (var i in item)
-                {
-                    outList.Add(i);    
-                }                
-            }
-            return outList.GetEnumerator();
+            return entryQueue.GetConsumingEnumerable().GetEnumerator();
         }
+
+
+        private string Decode(byte[] bytes)
+        {
+            if (useCompression)
+                bytes = Zip.Decompress(bytes);
+
+            return Encoding.ASCII.GetString(bytes);
+        }
+
 
         #endregion
 
@@ -256,7 +286,7 @@ namespace ConsoleApplication2
         {
             get
             {
-                return (frameQueue.IsAddingCompleted && (frameQueue.Count == 0));
+                return (entryQueue.IsAddingCompleted && (entryQueue.Count == 0));
             }
         }
 

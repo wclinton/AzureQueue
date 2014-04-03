@@ -2,42 +2,33 @@
 using System.Collections.Generic;
 using Microsoft.WindowsAzure.Storage.Blob;
 
-namespace ConsoleApplication2
+namespace BlobHandler
 {
-    internal class BlobsContextReader<T> : IEnumerable<T>, IEnumerator<T>
+    public class BlobsContextReader<T> : IEnumerable<T>, IEnumerator<T>
     {
         private readonly IEnumerator<ICloudBlob> blobsEnumerator;
-        private IEnumerator<T> masterEnumerator;
+        private IEnumerator<T> itemEnumerator;
         private readonly int boundedCapacity;
-
 
         public BlobsContextReader(IEnumerable<ICloudBlob> blobs, int boundedCapacity = 128)
         {
             this.boundedCapacity = boundedCapacity;
             blobsEnumerator = blobs.GetEnumerator();
-            masterEnumerator = GetNextItemEnumerator();
-        }
-
-        private IEnumerator<T> GetNextItemEnumerator()
-        {
-            //get the next blob ...
             var blob = GetNextBlob();
-            return blob == null ? null : GetItemEnumerator(blob);
+            itemEnumerator = GetItemEnumerator(blob);
         }
-
-        private IEnumerator<T> GetItemEnumerator(ICloudBlob blob)
-        {         
-            var reader = new BlobContentReader<T>(blob, boundedCapacity);
-            return reader.GetEnumerator();            
-        }
-
-        
 
         private ICloudBlob GetNextBlob()
         {
             if (blobsEnumerator.MoveNext())
                 return blobsEnumerator.Current;
             return null;
+        }
+
+        private IEnumerator<T> GetItemEnumerator(ICloudBlob blob)
+        {
+            var reader = new BlobContentReader<T>(blob, boundedCapacity);
+            return reader.GetEnumerator();
         }
 
         public IEnumerator<T> GetEnumerator()
@@ -53,32 +44,37 @@ namespace ConsoleApplication2
 
         public void Dispose()
         {
-         //   throw new System.NotImplementedException();
+            //   throw new System.NotImplementedException();
         }
 
         public bool MoveNext()
         {
             //If we can - just move the current enumerator...
-            if (masterEnumerator.MoveNext())
+            if (itemEnumerator.MoveNext())
                 return true;
 
-
             //we got to the end of this blob - try the next one.
-            masterEnumerator = GetNextItemEnumerator();
+            var blob = GetNextBlob();
 
-            if (masterEnumerator == null) return false;
-            return masterEnumerator.MoveNext();            
+            if (blob == null)
+                return false;
+
+            itemEnumerator = GetItemEnumerator(blob);
+
+            if (itemEnumerator == null) return false;
+            return itemEnumerator.MoveNext();
         }
 
         public void Reset()
         {
-           blobsEnumerator.Reset();
-           masterEnumerator = GetItemEnumerator(blobsEnumerator.Current);
+            blobsEnumerator.Reset();
+            var blob = GetNextBlob();
+            itemEnumerator = GetItemEnumerator(blob);
         }
 
         public T Current
         {
-            get { return masterEnumerator.Current; }            
+            get { return itemEnumerator.Current; }
         }
 
         object IEnumerator.Current

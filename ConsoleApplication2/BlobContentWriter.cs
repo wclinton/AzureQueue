@@ -24,9 +24,31 @@ namespace ConsoleApplication2
         private int _frameMaxSize;
         private bool _disposed;
 
+        private bool useCompression;
+
         #endregion
 
         #region Private methods
+
+        /// <summary>
+        /// Constructor.
+        /// </summary>
+        /// <param name="baseFileName">The base name of the file(s) to generate content to.</param>
+        /// <param name="maxSize">The max size of each file that will be generated.</param>
+        /// <param name="useCompression"></param>
+        public BlobContentWriter(string baseFileName, long maxSize, bool useCompression=false)
+       {
+           if (String.IsNullOrEmpty(baseFileName)) throw new ArgumentNullException("baseFileName");
+
+            _files = new List<string>();
+            _baseFileName = baseFileName;
+            _fileMaxSize = maxSize;
+              this.useCompression = useCompression;
+              _uncompressedLength = 0;
+            _compressedLength = 0;            
+            InitializeStream();
+        }
+
     
         /// <summary>
         /// Creates a new file using the base name and current index and opens a stream on the file.
@@ -86,24 +108,7 @@ namespace ConsoleApplication2
 
         #region Constructor and destructor
 
-        /// <summary>
-        /// Constructor.
-        /// </summary>
-        /// <param name="baseFileName">The base name of the file(s) to generate content to.</param>
-        /// <param name="maxSize">The max size of each file that will be generated.</param>
-        public BlobContentWriter(string baseFileName, long maxSize)
-        {
-            if (String.IsNullOrEmpty(baseFileName)) throw new ArgumentNullException("baseFileName");
-
-            _files = new List<string>();
-            _baseFileName = baseFileName;
-            _fileMaxSize = maxSize;
-            _uncompressedLength = 0;
-            _compressedLength = 0;
-
-            InitializeStream();
-        }
-
+      
         /// <summary>
         /// Destructor.
         /// </summary>
@@ -140,15 +145,19 @@ namespace ConsoleApplication2
                 FinalizeStream();
                 InitializeStream();
             }
+        
+            var encoded = Encoding.ASCII.GetBytes(content);
 
-            var compressed = Zip.Compress(Encoding.ASCII.GetBytes(content));
+            if (useCompression)
+                encoded = Zip.Compress(encoded);
 
-            _frameMaxSize = Math.Max(compressed.Length, _frameMaxSize);
 
-            var size = BitConverter.GetBytes(compressed.Length);
+            _frameMaxSize = Math.Max(encoded.Length, _frameMaxSize);
+
+            var size = BitConverter.GetBytes(encoded.Length);
 
             _stream.Write(size, 0, size.Length);
-            _stream.Write(compressed, 0, compressed.Length);
+            _stream.Write(encoded, 0, encoded.Length);
 
             _uncompressedLength += (content.Length + size.Length);
 
