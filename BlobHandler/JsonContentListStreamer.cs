@@ -1,8 +1,9 @@
 using System;
 using System.Text;
+using ConsoleApplication2;
 using Newtonsoft.Json;
 
-namespace ConsoleApplication2
+namespace BlobHandler
 {
     /// <summary>
     /// Class for generating serialized JSON list content based on objects or pre serialized data.

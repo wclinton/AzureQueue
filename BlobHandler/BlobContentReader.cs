@@ -17,15 +17,12 @@ namespace BlobHandler
     /// </summary>
     /// <typeparam name="T">The type of entities that will be returned in the GetNext method.</typeparam>
     public sealed class BlobContentReader<T> : IDisposable, IEnumerable<T>
-    {
-        #region Private members
-
+    {      
         private Task producerTask;
-        private BlockingCollection<T> entryQueue;
-        //     private CancellationTokenSource cancel;
+        private BlockingCollection<T> entryQueue;        
         private ManualResetEvent headerReady;
         private volatile int frameCount;
-        private volatile bool cancelled;
+        //private volatile bool cancelled;
         private bool disposed;
         private readonly bool useCompression;
 
@@ -36,7 +33,7 @@ namespace BlobHandler
         /// <param name="blobReference">The blob reference that content will be obtained from</param>
         /// <param name="boundedCapacity">The bounded size of the collection. This is used to throttle the producer.</param>
         /// <param name="useCompression"></param>
-        public BlobContentReader(ICloudBlob blobReference, int boundedCapacity = 128, bool useCompression = false)
+        public BlobContentReader(ICloudBlob blobReference, int boundedCapacity = 128, bool useCompression = true)
             : this(blobReference.OpenRead(), boundedCapacity, useCompression)
         {
             if (blobReference == null) throw new ArgumentNullException("blobReference");
@@ -45,25 +42,58 @@ namespace BlobHandler
 
         public BlobContentReader(Stream stream, int boundedCapacity = 128, bool useCompression = true)
         {
-
-
+            this.useCompression = useCompression;
             entryQueue = new BlockingCollection<T>(boundedCapacity);
             headerReady = new ManualResetEvent(false);
             //   cancel = new CancellationTokenSource();
-
-
-
-            producerTask = new Task(() => Producer(stream));
-          
-            this.useCompression = useCompression;
+            producerTask = new Task(() => Producer(stream));          
+        
             producerTask.Start();
         }
 
+        /// <summary>
+        /// Returns true if compression is turned on ... 
+        /// </summary>
+        public bool UseCompression
+        {
+            get { return useCompression; }
+        }
 
 
-        #endregion
+        /// <summary>
+        /// Destructor.
+        /// </summary>
+        ~BlobContentReader()
+        {
+            Dispose(false);
+        }
 
-        #region Private methods
+        /// <summary>
+        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Returns standard enumerator.
+        /// </summary>
+        /// <returns>Returns standard enumerator.</returns>
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        /// <summary>
+        /// Returns generic based enumerator.
+        /// </summary>
+        /// <returns> Returns generic based enumerator.</returns>
+        public IEnumerator<T> GetEnumerator()
+        {          
+            return entryQueue.GetConsumingEnumerable().GetEnumerator();
+        }
 
         /// <summary>
         /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
@@ -85,7 +115,7 @@ namespace BlobHandler
                     }
                     catch (Exception)
                     {
-                        cancelled = true;
+                      //  cancelled = true;
                     }
 
                     producerTask.Dispose();
@@ -160,7 +190,7 @@ namespace BlobHandler
                 }
                 catch (OperationCanceledException)
                 {
-                    cancelled = true;
+                  //  cancelled = true;
                 }
                 finally
                 {
@@ -178,7 +208,7 @@ namespace BlobHandler
         /// <param name="buffer">The buffer to place data into.</param>
         /// <param name="offset">The offset in the byte array to start placing data.</param>
         /// <param name="size">The number of bytes to read from the stream.</param>
-        private void ReadStream(Stream stream, byte[] buffer, int offset, int size)
+        private static void ReadStream(Stream stream, byte[] buffer, int offset, int size)
         {
             if (stream == null) throw new ArgumentNullException("stream");
             if (buffer == null) throw new ArgumentNullException("buffer");
@@ -193,114 +223,19 @@ namespace BlobHandler
                 read += stream.Read(buffer, offset + read, size - read);
             }
         }
-
-//        private byte[] ObjectToByteArray(Object obj)
-//        {
-//            if (obj == null)
-//                return null;
-//            var bf = new BinaryFormatter();
-//            using (var ms = new MemoryStream())
-//            {
-//                bf.Serialize(ms, obj);
-//                return ms.ToArray();
-//            }
-//        }
-
-
-        #endregion
-
-        #region Constructor and destructor
-
-
+      
 
         /// <summary>
-        /// Destructor.
+        /// Decode the given byte stream 
         /// </summary>
-        ~BlobContentReader()
-        {
-            Dispose(false);
-        }
-
-        #endregion
-
-        #region Public methods
-
-        /// <summary>
-        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Returns standard enumerator.
-        /// </summary>
-        /// <returns>Returns standard enumerator.</returns>
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        /// <summary>
-        /// Returns generic based enumerator.
-        /// </summary>
-        /// <returns> Returns generic based enumerator.</returns>
-        public IEnumerator<T> GetEnumerator()
-        {
-            //return entryQueue.GetConsumingEnumerable().Select(bytes => (IList<T>)JsonConvert.DeserializeObject(Decode(bytes), typeof(IList<T>))).GetEnumerator();
-
-            return entryQueue.GetConsumingEnumerable().GetEnumerator();
-        }
-
-
+        /// <param name="bytes"></param>
+        /// <returns></returns>
         private string Decode(byte[] bytes)
         {
             if (useCompression)
                 bytes = Zip.Decompress(bytes);
 
             return Encoding.ASCII.GetString(bytes);
-        }
-
-
-        #endregion
-
-        #region Public properties
-
-        /// <summary>
-        /// Returns the number of frames that the stream contains.
-        /// </summary>
-        public int FrameCount
-        {
-            get
-            {
-                return (headerReady.WaitOne() ? frameCount : 0);
-            }
-        }
-
-        /// <summary>
-        /// Returns true if all the frames have been consumed, otherwise false.
-        /// </summary>
-        public bool Eof
-        {
-            get
-            {
-                return (entryQueue.IsAddingCompleted && (entryQueue.Count == 0));
-            }
-        }
-
-        /// <summary>
-        /// Returns true if the streaming was cancelled, otherwise false.
-        /// </summary>
-        public bool Cancelled
-        {
-            get
-            {
-                return cancelled;
-            }
-        }
-
-        #endregion
+        }       
     }
 }

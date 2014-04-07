@@ -3,9 +3,9 @@ using System.Globalization;
 using Nephos.Model;
 using Nephos.Model.Base;
 
-namespace ConsoleApplication2
+namespace Utility
 {
-    static class InvoiceUtil
+    public static class InvoiceUtil
     {
         public static Invoice CreateInvoice(int index)
         {

@@ -7,6 +7,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleApplication2", "Cons
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlobHandler", "BlobHandler\BlobHandler.csproj", "{93C66757-1CF1-4A26-A0E2-08BEBBBA25F6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlobHandler.Tests", "BlobHandler.Tests\BlobHandler.Tests.csproj", "{0C93A41C-69A7-4013-B755-6D45DABC1B15}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utility", "Utility\Utility.csproj", "{F9698663-72DB-4C9E-9E89-157BE95D6EC3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +25,14 @@ Global
 		{93C66757-1CF1-4A26-A0E2-08BEBBBA25F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{93C66757-1CF1-4A26-A0E2-08BEBBBA25F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{93C66757-1CF1-4A26-A0E2-08BEBBBA25F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0C93A41C-69A7-4013-B755-6D45DABC1B15}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C93A41C-69A7-4013-B755-6D45DABC1B15}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0C93A41C-69A7-4013-B755-6D45DABC1B15}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0C93A41C-69A7-4013-B755-6D45DABC1B15}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F9698663-72DB-4C9E-9E89-157BE95D6EC3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F9698663-72DB-4C9E-9E89-157BE95D6EC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F9698663-72DB-4C9E-9E89-157BE95D6EC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F9698663-72DB-4C9E-9E89-157BE95D6EC3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

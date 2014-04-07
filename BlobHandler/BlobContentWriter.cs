@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace ConsoleApplication2
+namespace BlobHandler
 {
     /// <summary>
     /// Class for handling creation of a multi-frame file to upload to blob storage.
@@ -13,16 +13,16 @@ namespace ConsoleApplication2
     {
         #region Private members
 
-        private Stream _stream;
-        private readonly List<string> _files;
-        private readonly byte[] _header = new byte[sizeof(int) * 2];
-        private readonly string _baseFileName;
-        private readonly long _fileMaxSize;
-        private long _compressedLength;
-        private long _uncompressedLength;
-        private int _frameCount;
-        private int _frameMaxSize;
-        private bool _disposed;
+        private Stream stream;
+        private readonly List<string> files;
+        private readonly byte[] header = new byte[sizeof(int) * 2];
+        private readonly string baseFileName;
+        private readonly long fileMaxSize;
+        private long compressedLength;
+        private long uncompressedLength;
+        private int frameCount;
+        private int frameMaxSize;
+        private bool disposed;
 
         private bool useCompression;
 
@@ -36,32 +36,32 @@ namespace ConsoleApplication2
         /// <param name="baseFileName">The base name of the file(s) to generate content to.</param>
         /// <param name="maxSize">The max size of each file that will be generated.</param>
         /// <param name="useCompression"></param>
-        public BlobContentWriter(string baseFileName, long maxSize, bool useCompression=false)
-       {
-           if (String.IsNullOrEmpty(baseFileName)) throw new ArgumentNullException("baseFileName");
+        public BlobContentWriter(string baseFileName, long maxSize, bool useCompression = true)
+        {
+            if (String.IsNullOrEmpty(baseFileName)) throw new ArgumentNullException("baseFileName");
 
-            _files = new List<string>();
-            _baseFileName = baseFileName;
-            _fileMaxSize = maxSize;
-              this.useCompression = useCompression;
-              _uncompressedLength = 0;
-            _compressedLength = 0;            
+            files = new List<string>();
+            this.baseFileName = baseFileName;
+            fileMaxSize = maxSize;
+            this.useCompression = useCompression;
+            uncompressedLength = 0;
+            compressedLength = 0;
             InitializeStream();
         }
 
-    
+
         /// <summary>
         /// Creates a new file using the base name and current index and opens a stream on the file.
         /// </summary>
         private void InitializeStream()
         {
-            _frameCount = 0;
-            _frameMaxSize = 0;
+            frameCount = 0;
+            frameMaxSize = 0;
 
-            _files.Add(String.Format("{0}.{1:D3}", _baseFileName, _files.Count));
+            files.Add(String.Format("{0}.{1:D3}", baseFileName, files.Count));
 
-            _stream = File.Open(_files[_files.Count - 1], FileMode.Create);
-            _stream.Write(_header, 0, _header.Length);
+            stream = File.Open(files[files.Count - 1], FileMode.Create);
+            stream.Write(header, 0, header.Length);
         }
 
         /// <summary>
@@ -69,20 +69,20 @@ namespace ConsoleApplication2
         /// </summary>
         private void FinalizeStream()
         {
-            if (_stream != null)
+            if (stream != null)
             {
-                _compressedLength += _stream.Length;
+                compressedLength += stream.Length;
 
-                _stream.Seek(0, SeekOrigin.Begin);
+                stream.Seek(0, SeekOrigin.Begin);
 
-                var counter = BitConverter.GetBytes(_frameCount);
-                var largestFrame = BitConverter.GetBytes(_frameMaxSize);
+                var counter = BitConverter.GetBytes(frameCount);
+                var largestFrame = BitConverter.GetBytes(frameMaxSize);
 
-                _stream.Write(counter, 0, counter.Length);
-                _stream.Write(largestFrame, 0, largestFrame.Length);
+                stream.Write(counter, 0, counter.Length);
+                stream.Write(largestFrame, 0, largestFrame.Length);
 
-                _stream.Dispose();
-                _stream = null;
+                stream.Dispose();
+                stream = null;
             }
         }
 
@@ -92,7 +92,7 @@ namespace ConsoleApplication2
         /// <param name="disposing">True if managed resources should be cleaned up.</param>
         private void Dispose(bool disposing)
         {
-            if (!disposing || _disposed) return;
+            if (!disposing || disposed) return;
 
             try
             {
@@ -100,7 +100,7 @@ namespace ConsoleApplication2
             }
             finally
             {
-                _disposed = true;
+                disposed = true;
             }
         }
 
@@ -108,13 +108,13 @@ namespace ConsoleApplication2
 
         #region Constructor and destructor
 
-      
+
         /// <summary>
         /// Destructor.
         /// </summary>
         ~BlobContentWriter()
         {
-            Dispose(false);    
+            Dispose(false);
         }
 
         #endregion
@@ -129,7 +129,7 @@ namespace ConsoleApplication2
             Dispose(true);
             GC.SuppressFinalize(this);
         }
-        
+
         /// <summary>
         /// Writes a new frame of content to the stream and returns the index of the frame. If max size is greater than
         /// zero, then file splitting will be used.
@@ -140,28 +140,28 @@ namespace ConsoleApplication2
         {
             if (String.IsNullOrEmpty(content)) return (-1);
 
-            if ((_fileMaxSize > 0) && (_stream.Position > (_fileMaxSize + _header.Length)))
+            if ((fileMaxSize > 0) && (stream.Position > (fileMaxSize + header.Length)))
             {
                 FinalizeStream();
                 InitializeStream();
             }
-        
+
             var encoded = Encoding.ASCII.GetBytes(content);
 
             if (useCompression)
                 encoded = Zip.Compress(encoded);
 
 
-            _frameMaxSize = Math.Max(encoded.Length, _frameMaxSize);
+            frameMaxSize = Math.Max(encoded.Length, frameMaxSize);
 
             var size = BitConverter.GetBytes(encoded.Length);
 
-            _stream.Write(size, 0, size.Length);
-            _stream.Write(encoded, 0, encoded.Length);
+            stream.Write(size, 0, size.Length);
+            stream.Write(encoded, 0, encoded.Length);
 
-            _uncompressedLength += (content.Length + size.Length);
+            uncompressedLength += (content.Length + size.Length);
 
-            return _frameCount++;
+            return frameCount++;
         }
 
         /// <summary>
@@ -179,7 +179,7 @@ namespace ConsoleApplication2
         /// <returns>The files list enumerator</returns>
         public IEnumerator<string> GetEnumerator()
         {
-            return _files.GetEnumerator();
+            return files.GetEnumerator();
         }
 
         /// <summary>
@@ -187,7 +187,7 @@ namespace ConsoleApplication2
         /// </summary>
         public void Close()
         {
-            Dispose();            
+            Dispose();
         }
 
         /// <summary>
@@ -195,7 +195,7 @@ namespace ConsoleApplication2
         /// </summary>
         public string Files(int index)
         {
-            return _files[index];
+            return files[index];
         }
 
         #endregion
@@ -209,7 +209,7 @@ namespace ConsoleApplication2
         {
             get
             {
-                return _files[index];
+                return files[index];
             }
         }
 
@@ -220,7 +220,7 @@ namespace ConsoleApplication2
         {
             get
             {
-                return _files.Count;
+                return files.Count;
             }
         }
 
@@ -231,7 +231,7 @@ namespace ConsoleApplication2
         {
             get
             {
-                return _stream.Length + _compressedLength;
+                return stream.Length + compressedLength;
             }
         }
 
@@ -242,7 +242,7 @@ namespace ConsoleApplication2
         {
             get
             {
-                return _uncompressedLength;
+                return uncompressedLength;
             }
         }
 
