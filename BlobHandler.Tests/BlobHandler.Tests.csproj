@@ -85,7 +85,10 @@
     </Otherwise>
   </Choose>
   <ItemGroup>
+    <Compile Include="BaseQueueWorker.cs" />
     <Compile Include="BlobContentReaderTests.cs" />
+    <Compile Include="ConnectionWorkflowWorkerData.cs" />
+    <Compile Include="IWorker.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
